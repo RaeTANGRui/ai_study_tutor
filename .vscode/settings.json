@@ -1,4 +1,8 @@
 {
+    "python.envFile": "${workspaceFolder}/.vscode/.env",
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
     "trae.tab.enableRename": false,
     "trae.tab.enableAutoImport": false
 }
