@@ -244,7 +244,7 @@ def download_zip_and_extract_md(zip_urls: str | list[str], local_dir_obj:Path,  
                 md_path_list.append(md_file)
                 found = True
                 logger.info(f"向minerU返回的下载文件地址:{zip_url}请求,文件下载成功,文件地址为:{md_file},跳出循环即可!")
-                return md_path_list
+                break
 
         # 优先级2：找不到同名，找 full.md（MinerU 默认完整导出文件）
         if not found:
@@ -254,10 +254,11 @@ def download_zip_and_extract_md(zip_urls: str | list[str], local_dir_obj:Path,  
                     renamed = full_md_file.rename(full_md_file.with_name(f"{file_name}.md"))
                     md_path_list.append(renamed)
                     found = True
-                    logger.info(f"向minerU返回的下载文件地址:{zip_url}请求,文件下载成功,文件地址为:{md_path_list},跳出循环即可!")
-                    return md_path_list
+                    logger.info(f"向minerU返回的下载文件地址:{zip_url}请求,文件下载成功,文件地址为:{renamed},跳出循环即可!")
+                    break
 
         # 最后：有md文件 命名既不是full 又不是 文件名.md
+        if not found:
             logger.error(f"向minerU返回的下载文件地址:{zip_url}请求,文件下载成功,解压后文件名不叫full或者文件名,请根据官网明确后,再解析!")
             raise FileNotFoundError(f"向minerU返回的下载文件地址:{zip_url}请求,文件下载成功,解压后文件名不叫full或者文件名,请根据官网明确后,再解析!")
 
@@ -265,30 +266,41 @@ def download_zip_and_extract_md(zip_urls: str | list[str], local_dir_obj:Path,  
     return md_path_list[0] if isinstance(zip_urls, str) else md_path_list
 
 
-# 【文件转Markdown统一服务】
+# 【文件转Markdown统一服务】支持单文件和多文件批量上传
 @step_log("parse_file_to_markdown")
 def parse_file_to_markdown(state: ImportGraphState) -> ImportGraphState:
-    # 1. 检测文件类型并获取路径
-    matched_path_key = None
+    # 1. 收集所有启用的文件路径
+    file_path_objs: list[Path] = []
     for flag_key, path_key in FILE_TYPE_PATH_MAP.items():
         if state.get(flag_key, False):
-            matched_path_key = path_key
             if not state.get(path_key):
                 logger.error(f"{flag_key}为True但{path_key}为空,业务无法继续,提前终止!")
                 raise ValueError(f"{flag_key}为True但{path_key}为空,业务无法继续,提前终止!")
-            break
-    if matched_path_key is None:
+            file_path_obj, _ = validate_data_and_paths(state, path_key)
+            file_path_objs.append(file_path_obj)
+
+    if not file_path_objs:
         logger.error("未找到任何启用的文件类型标记,业务无法继续,提前终止!")
         raise ValueError("未找到任何启用的文件类型标记,业务无法继续,提前终止!")
 
-    # 2. 校验文件路径和输出目录（传入path_key让validate_data_and_paths从state中读取对应路径）
-    file_path_obj, local_dir_obj = validate_data_and_paths(state, matched_path_key)
+    # 2. 校验输出目录
+    local_dir: str | None = state.get("local_dir")
+    if not local_dir:
+        local_dir = str(PROJECT_ROOT / PARSE_PDF_OUTPUT_DIR)
+        logger.warning(f"local_dir为空,为了业务继续进行,给与默认值:{local_dir}")
+    local_dir_obj = Path(local_dir)
+    if not local_dir_obj.is_dir():
+        logger.warning(f"{str(local_dir_obj)}地址没有对应的文件夹,我们提前创建!!")
+        local_dir_obj.mkdir(parents=True, exist_ok=True)
 
-    # 3. minerU申请解析和文件上传以及轮询获取解析结果
-    full_zip_urls: str | list[str] = upload_file_and_poll(file_path_obj)
+    # 3. minerU申请解析和文件上传以及轮询获取解析结果（单文件传Path，多文件传list[Path]）
+    upload_input = file_path_objs[0] if len(file_path_objs) == 1 else file_path_objs
+    full_zip_urls: str | list[str] = upload_file_and_poll(upload_input)
 
-    # 4. 下载并解压md文件以及重命名工作
-    md_path_obj = download_zip_and_extract_md(full_zip_urls, local_dir_obj, file_path_obj.stem)
+    # 4. 下载并解压md文件以及重命名工作（单文件传str，多文件传list[str]）
+    file_names = [p.stem for p in file_path_objs]
+    download_names = file_names[0] if len(file_names) == 1 else file_names
+    md_path_obj = download_zip_and_extract_md(full_zip_urls, local_dir_obj, download_names)
     if isinstance(md_path_obj, Path):
         state['md_paths'] = [str(md_path_obj)]
     else:

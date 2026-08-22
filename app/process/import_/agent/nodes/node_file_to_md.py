@@ -14,17 +14,18 @@ def node_file_to_md(state: ImportGraphState) -> ImportGraphState:
 
 
 if __name__ == "__main__":
-    logger.info("===== 开始 node_file_to_md 节点联调测试 =====")
+    logger.info("===== 开始 node_file_to_md 节点联调测试（多文件批量上传）=====")
 
-    test_word_path = os.path.join(PROJECT_ROOT, "docs", "word", "尚硅谷大模型技术之大模型概述v1.1.7.docx")
+    test_pdf_path = os.path.join(PROJECT_ROOT, "docs", "pdf", "什么是 RAG？详细描述一个完整 RAG 系统的详细工作流程？.pdf")
     test_state = create_default_state(
         task_id="test_file2md_task_001",
-        is_word_read_enabled=True,
-        word_path=test_word_path,
+        is_pdf_read_enabled=True,
+        pdf_path=test_pdf_path,
         local_dir=os.path.join(PROJECT_ROOT, "output"),
     )
 
     result = node_file_to_md(test_state)
     logger.info(f"md_paths: {result['md_paths']}")
     logger.info(f"md_content长度: {len(result['md_content'])}")
+    
     logger.info("===== 结束 node_file_to_md 节点联调测试 =====")
